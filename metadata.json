@@ -1,0 +1,7 @@
+{
+  "name": "Medi-Give (Medicine Bridge)",
+  "description": "A secure medicine donation marketplace connecting households with surplus medicines to verified NGOs using AI-powered image recognition.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
