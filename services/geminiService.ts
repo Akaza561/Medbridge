@@ -4,14 +4,13 @@ import { GoogleGenAI, Type } from "@google/genai";
 /**
  * Uses Gemini AI to analyze an image of a medicine package.
  * Extracts key details such as name, dosage, manufacturer, and expiry.
+ * If expiry is not found, it estimates based on Mfg date or generates a default.
  */
 export async function analyzeMedicineImage(base64Image: string) {
-  // Always use the required initialization pattern with named parameter.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    // Correct content structure for multiple parts: use { parts: [...] }
     contents: {
       parts: [
         {
@@ -21,7 +20,15 @@ export async function analyzeMedicineImage(base64Image: string) {
           },
         },
         {
-          text: "Extract medicine details from this image. Only provide details if it's a medicine. Determine if it is sealed and unexpired. Current date: " + new Date().toISOString()
+          text: `Extract medicine details from this image. 
+          FALLBACK LOGIC FOR EXPIRY DATE:
+          1. If an expiry date is clearly visible, use it.
+          2. If only a Manufacturing Date (Mfg) is visible, add 3 years to determine the expiry date.
+          3. If NO date is visible, estimate a date exactly 6 months from today's date for safety.
+          4. If the determined date is in the past, set isUnexpired to false.
+          
+          Current date: ${new Date().toISOString()}
+          Only provide details if it's a medicine. Determine if it is sealed.`
         }
       ]
     },
@@ -36,15 +43,15 @@ export async function analyzeMedicineImage(base64Image: string) {
           expiryDate: { type: Type.STRING, description: "Expiry date in YYYY-MM-DD format" },
           isSealed: { type: Type.BOOLEAN, description: "Is the medicine packaging sealed?" },
           isUnexpired: { type: Type.BOOLEAN, description: "Is the expiry date in the future?" },
+          isDateEstimated: { type: Type.BOOLEAN, description: "True if the AI had to estimate/generate the date because it wasn't clearly printed." },
           confidence: { type: Type.NUMBER, description: "Confidence score from 0-1" }
         },
-        required: ["name", "dosage", "manufacturer", "expiryDate", "isSealed", "isUnexpired"],
-        propertyOrdering: ["name", "dosage", "manufacturer", "expiryDate", "isSealed", "isUnexpired", "confidence"]
+        required: ["name", "dosage", "manufacturer", "expiryDate", "isSealed", "isUnexpired", "isDateEstimated"],
+        propertyOrdering: ["name", "dosage", "manufacturer", "expiryDate", "isSealed", "isUnexpired", "isDateEstimated", "confidence"]
       }
     }
   });
 
-  // response.text is a property, not a method. Do not call text().
   const jsonStr = response.text?.trim();
   if (!jsonStr) {
     throw new Error("Could not extract medicine details from the provided image.");

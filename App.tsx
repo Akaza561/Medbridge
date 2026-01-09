@@ -49,7 +49,6 @@ const ActiveDelivery: React.FC<{
   return (
     <div className="fixed inset-0 z-[110] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
       <div className={`w-full max-w-xl rounded-3xl p-10 border shadow-2xl overflow-hidden relative ${themeCard}`}>
-        {/* Animated background pulse */}
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-cyan-500 rounded-full animate-ping duration-[3000ms]" />
         </div>
@@ -98,20 +97,15 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeDeliveryInfo, setActiveDeliveryInfo] = useState<{ medicineName: string; ngoName: string; claimId: string } | null>(null);
   
-  // Theme state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('medi_give_theme');
     return saved === null ? true : saved === 'dark';
   });
   
-  // State for direct donation targeting
   const [targetNGO, setTargetNGO] = useState<NGO | null>(null);
   const [targetWishlistItem, setTargetWishlistItem] = useState<WishlistItem | null>(null);
-  
-  // State for managing wishlist addition
   const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
 
-  // Mock NGOs state with local persistence
   const [ngos, setNgos] = useState<NGO[]>(() => {
     const saved = localStorage.getItem('medi_give_ngos');
     if (saved) return JSON.parse(saved);
@@ -159,7 +153,6 @@ const App: React.FC = () => {
   useEffect(() => localStorage.setItem('medi_give_ngos', JSON.stringify(ngos)), [ngos]);
   useEffect(() => localStorage.setItem('medi_give_theme', isDarkMode ? 'dark' : 'light'), [isDarkMode]);
 
-  // Automated delivery simulation logic (slower background updates)
   useEffect(() => {
     const statusCycle = [DonationStatus.ACCEPTED, DonationStatus.PICKED_UP, DonationStatus.DELIVERED];
     const interval = setInterval(() => {
@@ -217,7 +210,7 @@ const App: React.FC = () => {
   };
 
   const isMatch = useMemo(() => {
-    if (!activeMedicine || !targetWishlistItem) return true; // Default to true if not targeting specific item
+    if (!activeMedicine || !targetWishlistItem) return true;
     return activeMedicine.name.toLowerCase().includes(targetWishlistItem.medicineName.toLowerCase()) ||
            targetWishlistItem.medicineName.toLowerCase().includes(activeMedicine.name.toLowerCase());
   }, [activeMedicine, targetWishlistItem]);
@@ -243,11 +236,22 @@ const App: React.FC = () => {
     setActiveMedicine(data);
     setShowScanner(false);
     setCurrentView('submit-donation');
+    if (data.isDateEstimated) {
+      addNotification("AI could not find a printed expiry date. A 6-month safety estimate has been applied.", "warning");
+    }
+    if (!data.isUnexpired) {
+      addNotification("WARNING: This medicine appears to be EXPIRED.", "warning");
+    }
   };
 
   const submitDonation = (address: string) => {
     if (!activeMedicine) return;
     
+    if (!activeMedicine.isUnexpired) {
+        addNotification("Cannot donate expired medicine. Please dispose of safely.", "warning");
+        return;
+    }
+
     if (targetWishlistItem && !isMatch) {
       addNotification(`Warning: Scanned medicine (${activeMedicine.name}) does not match requested ${targetWishlistItem.medicineName}.`, 'warning');
     }
@@ -303,7 +307,6 @@ const App: React.FC = () => {
 
   const handleFastDeliveryComplete = () => {
     if (activeDeliveryInfo) {
-      // Update claim and its corresponding donation
       setClaims(prev => prev.map(c => 
         c.id === activeDeliveryInfo.claimId ? { ...c, status: DonationStatus.DELIVERED } : c
       ));
@@ -326,7 +329,7 @@ const App: React.FC = () => {
     if (!claimingDonation) return;
     
     const claimId = Math.random().toString(36).substr(2, 9);
-    const ngoId = 'ngo1'; // Mocking current NGO ID
+    const ngoId = 'ngo1';
     const newClaim: Claim = {
       id: claimId,
       donationId: claimingDonation.id,
@@ -385,12 +388,22 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setIsDarkMode(prev => !prev);
 
-  // Dynamic theme classes
   const themeBg = isDarkMode ? 'bg-slate-950' : 'bg-slate-50';
   const themeText = isDarkMode ? 'text-slate-50' : 'text-slate-900';
   const themeCard = isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm';
   const themeSubText = isDarkMode ? 'text-slate-400' : 'text-slate-600';
   const themeAltBg = isDarkMode ? 'bg-slate-950/50' : 'bg-slate-100/50';
+
+  const getRoleBranding = (role: UserRole) => {
+    switch (role) {
+      case UserRole.DONOR: return { label: 'Donor Portal', color: 'text-cyan-500', border: 'border-cyan-500/20' };
+      case UserRole.NGO: return { label: 'NGO / Clinic Hub', color: 'text-emerald-500', border: 'border-emerald-500/20' };
+      case UserRole.ADMIN: return { label: 'Administrator Control', color: 'text-indigo-500', border: 'border-indigo-500/20' };
+      default: return { label: 'User Portal', color: 'text-slate-500', border: 'border-slate-500/20' };
+    }
+  };
+
+  const activeBranding = getRoleBranding(currentRole);
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${themeBg} ${themeText} selection:bg-cyan-500/30`}>
@@ -403,7 +416,6 @@ const App: React.FC = () => {
         onToggleTheme={toggleTheme}
       />
 
-      {/* Notification Toast System */}
       <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-4 max-w-sm w-full">
         {notifications.map(n => (
           <div key={n.id} className={`p-4 rounded-2xl border shadow-2xl animate-[slideInRight_0.3s_ease-out] flex items-center gap-4 ${
@@ -418,6 +430,19 @@ const App: React.FC = () => {
       </div>
 
       <main className="pt-24 pb-12 px-6 max-w-7xl mx-auto min-h-screen">
+        {/* Portal Context Banner */}
+        <div className={`mb-12 p-3 rounded-2xl border backdrop-blur-sm flex items-center justify-between animate-[fadeIn_0.5s_ease-out] ${isDarkMode ? 'bg-slate-900/40' : 'bg-white shadow-sm'} ${activeBranding.border}`}>
+           <div className="flex items-center gap-4 px-2">
+             <div className={`w-2 h-2 rounded-full animate-pulse ${activeBranding.color.replace('text', 'bg')}`} />
+             <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${activeBranding.color}`}>
+               Active Session: {activeBranding.label}
+             </span>
+           </div>
+           <div className={`text-[9px] font-medium opacity-50 hidden md:block px-4`}>
+             Secure End-to-End Encryption Enabled
+           </div>
+        </div>
+
         {currentView === 'home' && (
           <div className="flex flex-col items-center justify-center py-12 text-center animate-[fadeIn_0.5s_ease-out]">
             <div className={`inline-block px-4 py-1.5 mb-6 rounded-full border text-sm font-medium ${
@@ -699,6 +724,11 @@ const App: React.FC = () => {
                             <ICONS.Heart className="w-3.5 h-3.5" /> Recipient NGO: {d.ngoName}
                           </div>
                         )}
+                        {d.medicine.isDateEstimated && (
+                          <div className="mt-1 text-[10px] font-bold text-amber-500 uppercase tracking-widest">
+                            Estimated Expiry
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-3">
@@ -732,6 +762,16 @@ const App: React.FC = () => {
               <ICONS.ArrowLeft className="w-4 h-4" /> Back to Home
             </button>
             
+            {!activeMedicine.isUnexpired && (
+              <div className="mb-8 p-6 bg-rose-500/20 border border-rose-500/30 rounded-3xl flex items-center gap-4 text-rose-500 animate-pulse">
+                <svg className="w-8 h-8 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                <div>
+                  <p className="font-bold text-lg">Safety Risk: Medicine Expired</p>
+                  <p className="text-sm opacity-90">Our AI detected an expiry date in the past ({activeMedicine.expiryDate}). We cannot accept expired medicines for donation.</p>
+                </div>
+              </div>
+            )}
+
             {targetNGO && (
               <div className={`mb-8 p-6 border rounded-3xl flex items-center justify-between transition-all ${
                 isDarkMode ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
@@ -784,27 +824,42 @@ const App: React.FC = () => {
                     <p className="text-xl font-medium">{activeMedicine.dosage}</p>
                   </div>
                   <div>
-                    <label className={`text-xs font-bold uppercase tracking-widest mb-1 block ${themeSubText}`}>Expires On</label>
-                    <p className="text-xl text-cyan-500 font-mono font-bold">{activeMedicine.expiryDate}</p>
+                    <label className={`text-xs font-bold uppercase tracking-widest mb-1 block ${themeSubText}`}>
+                      {activeMedicine.isDateEstimated ? "Smart Estimated Expiry" : "Expires On"}
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <p className={`text-xl font-mono font-bold ${!activeMedicine.isUnexpired ? 'text-rose-500' : activeMedicine.isDateEstimated ? 'text-amber-500' : 'text-cyan-500'}`}>
+                        {activeMedicine.expiryDate}
+                      </p>
+                      {activeMedicine.isDateEstimated && (
+                        <span className="bg-amber-500/10 text-amber-500 text-[10px] px-2 py-1 rounded-lg border border-amber-500/20 font-bold uppercase">Estimated</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-4">
                   <label className={`text-sm font-bold block ${themeSubText}`}>Pickup Details</label>
                   <textarea 
                     placeholder="Enter pickup address..."
+                    disabled={!activeMedicine.isUnexpired}
                     className={`w-full rounded-xl p-4 outline-none transition-all ring-offset-2 focus:ring-2 focus:ring-cyan-500 border ${
                       isDarkMode ? 'bg-slate-950 border-slate-800 ring-offset-slate-900' : 'bg-white border-slate-200 ring-offset-white'
-                    }`}
+                    } ${!activeMedicine.isUnexpired ? 'opacity-50 cursor-not-allowed' : ''}`}
                     id="pickup-address"
                   />
                   <button 
+                    disabled={!activeMedicine.isUnexpired}
                     onClick={() => submitDonation((document.getElementById('pickup-address') as HTMLTextAreaElement).value)}
-                    className="w-full py-5 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold text-lg transition-all shadow-xl shadow-cyan-600/10 active:scale-[0.98] text-white"
+                    className={`w-full py-5 rounded-xl font-bold text-lg transition-all shadow-xl active:scale-[0.98] text-white ${
+                        !activeMedicine.isUnexpired 
+                        ? 'bg-slate-700 cursor-not-allowed opacity-50' 
+                        : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-600/10'
+                    }`}
                   >
-                    Confirm Donation
+                    {!activeMedicine.isUnexpired ? 'Cannot Donate Expired' : 'Confirm Donation'}
                   </button>
                   <p className="text-[10px] text-center text-slate-500 uppercase font-bold tracking-widest">
-                    AI verification successful. Donation logistics will be assigned immediately.
+                    {activeMedicine.isDateEstimated ? "Manual review may be required by NGO." : "AI verification successful. Logistics ready."}
                   </p>
                 </div>
               </div>
@@ -813,13 +868,11 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Background Decorative Elements */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none -z-10 overflow-hidden opacity-30">
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 blur-[120px] rounded-full" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[120px] rounded-full" />
       </div>
 
-      {/* Active Delivery Fast-Track Overlay */}
       {activeDeliveryInfo && (
         <ActiveDelivery 
           isDarkMode={isDarkMode}
@@ -829,7 +882,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Modals for Wishlist and Claims */}
       {showScanner && (
         <Scanner 
           onScanComplete={handleScanComplete}

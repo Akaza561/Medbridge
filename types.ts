@@ -21,6 +21,7 @@ export interface MedicineData {
   expiryDate: string;
   isSealed: boolean;
   isUnexpired: boolean;
+  isDateEstimated: boolean; // New field for fallback tracking
   confidence: number;
   imageUrl?: string;
 }
